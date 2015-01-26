@@ -171,3 +171,20 @@ confusionMatrix(pred1,datatrain$classe)
 #check the testing set ========================================================
 pred2=predict(modFit,newdata=datatest)
 confusionMatrix(pred2,datatest$classe)
+
+#chek the test cases=========================================
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+#load and clean data
+testdata_raw=csv.get('pml-testing.csv')
+testdata=testdata_raw[,colSums(is.na(testdata_raw)) == 0]
+testdata=testdata[,colSums(alldata=='') == 0]
+
+pred3=predict(modFit,newdata=testdata)
+pml_write_files(pred3)
