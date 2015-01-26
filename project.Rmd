@@ -1,0 +1,92 @@
+```{r setup}
+opts_knit$set(root.dir = '../pml')
+```
+
+Practical Machine Learning -- Project
+========================================================
+### Jan 25, 2015
+*************************
+
+# Introduction
+This project aims to explore a variety of the machine learning algorithms presented in this course by using them to  predict how "well" the exercise consisting of raising and lowering a dumbbell is performed by a set of test individuals, using information obtained from a variety of sensors. Predictions are made using the `caret` package from R.
+
+The exercise experiment was described by Velloso et al. (2013) and their data was used for this study (available at [http://groupware.les.inf.puc-rio.br/har][datalink].
+
+# The Weightlifting Exercise
+The purpose of the weightlifting exercise (WLE) experiment is to explore three aspects of human activity recognition: specifying what a correct execution consists of, detection and correction of mistakes, and providing feedback to the user regarding the quality of exection. 
+
+Velloso et al. used an on-body sensor approach with accelerometers, gyroscopes, and magnetometers attached to the participants' midsection, forearm, arm, and to the dumbbell itself. The authors  describe the experiment as follows. 
+
+>Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+The correctness of the excercise was determined by a professional weightlifter.
+
+# Materials and Methods
+The purpose of this project is to determine, based on the various on-body sensor data, which category (A, B, C, E, or E) any given set of measurements falls into. 
+
+First, after correctly setting the working directory, the raw dataset was read into R
+```{r}
+library(Hmisc)
+alldata_raw=csv.get('pml-training.csv')
+```
+giving a dataset of 160 variables. The data was then cleaned to remove all columns containing `na` or empty values.
+```{r}
+alldata=alldata_raw[,colSums(is.na(alldata_raw)) == 0]
+alldata=alldata[,colSums(alldata=='') == 0]
+```
+giving a dataset of 60 variables, the first seven of which are identification variables and are not used for prediction.
+
+For cross-validation, the training data was partitioned into a training (70%) and testing (30%) dataset
+```{r}
+library(caret)
+idxtrain=createDataPartition(alldata$classe,p=.7,list=FALSE)
+datatrain=alldata[idxtrain,]
+datatest=alldata[-idxtrain,]
+```
+
+In order to determine potential candidate predictors, an exploratory analysis using `caret`'s `featurePlot` function with plot type "pairs" was carried out. Based on these plots, combined with an educated guess about which parameters might affect predictions for each class, the following set of variables was identified
+```
+'total.accel.belt',
+'accel.forearm.y','accel.forearm.z',
+'gyros.dumbbell.y','gyros.dumbbell.z',       
+'gyros.forearm.y','gyros.forearm.z',
+'gyros.arm.y','gyros.arm.z',
+'magnet.dumbbell.x','magnet.dumbbell.y','magnet.dumbbell.z',
+'roll.dumbbell',
+'pitch.dumbbell','pitch.arm'
+```
+
+The `train` command from `caret` was used to carry out predictions using three different algorithms: classification trees using `rpart` and the above parameter set, principal compontent analysis (PCA) using `rpart` and the complete parameter set, random forests using `rf` with the complete parameter set.
+
+# Results
+The classification using `rpart` with the raw and PCA-transformed data yielded generally poor results. The classification accuracy of the former was approximately 52% and the latter 36%. Therefore, the focus in the remaining discussion is on the random forest method.
+
+First, from the cleaned data, exclude the non-predictor columns
+```{r}
+cols=c('X','user.name','raw.timestamp.part.1','raw.timestamp.part.2',
+       'cvtd.timestamp','new.window','num.window')
+datatrain_subset=datatrain[,!names(datatrain) %in% cols]
+```
+Now, train the model and fit the training data to obtain an in-sample estimate of the error. The nodesize, sample size, and number of trees of the `rf` method were tweaked to decrease the time required to train the model. 
+```{r}
+modFit=train(classe ~ .,method="rf",data=datatrain_subset,nodesize=5,
+                do.trace=F,sampsize=100,ntree=150)
+pred1=predict(modFit,newdata=datatrain)
+confusionMatrix(pred1,datatrain$classe)
+```
+The in-sample accuracy is satisfactory (between 77% and 80% as observed from several runs).
+
+If we apply the trained model to our testing data, we obtain an estimate of the out-of-sample error
+```{r}
+pred2=predict(modFit,newdata=datatest)
+confusionMatrix(pred2,datatest$classe)
+```
+The accuracy, along with the sensitivities and specificities are similar for the testing set, indicating a good model fit.
+
+# Conclusion
+The random forest method proved to be the most effective, giving an estimated out-of-sample accuracy between 77% and 80%. The disadvantage compared to the other methods trialled is the increased running time.
+
+## References
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
+
+[datalink]: http://groupware.les.inf.puc-rio.br/har
